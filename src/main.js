@@ -1,5 +1,3 @@
-import './fonts/ys-display/fonts.css'
-import './style.css'
 
 import {data as sourceData} from "./data/dataset_1.js";
 
@@ -14,31 +12,21 @@ import { initSearching } from './components/searching.js';
 
 // @todo: подключение
 
+const api = initData(sourceData); 
+let globalIndexes = null;
 
-// Исходные данные используемые в render()
-const {data, ...indexes} = initData(sourceData);
-const sellersList = Object.values(indexes.sellers);
-const customersList = Object.values(indexes.customers);
-/**
- * Сбор и обработка полей из таблицы
+ /* Сбор и обработка полей из таблицы
  * @returns {Object}
  */
 function collectState() {
-    // 1. Сначала получаем сырые данные из формы (они все будут строками)
     const state = processFormData(new FormData(sampleTable.container));
-
-    // 2. Приводим к числам. 
-    // ?? 1 означает: "если state.page нет, то пусть будет 1"
-    const page = parseInt(state.page ?? 1);
-    
-    // Если в форме есть поле rowsPerPage, берем его, иначе по умолчанию 10
-    const rowsPerPage = parseInt(state.rowsPerPage);
-
-    // 3. Возвращаем объект, где уже есть нормальные числа
     return {
-        ...state,          // оставляем всё остальное (фильтры, поиск и т.д.)
-        page,              // добавляем числовой номер страницы
-        rowsPerPage        // добавляем числовой размер страницы
+        ...state,
+        // Гарантируем числа, иначе сервер вернёт 400
+        page: parseInt(state.page) || 1,
+       // rowsPerPage: parseInt(state.rowsPerPage) || 10,
+        search: state.search,
+        filter: state.filter
     };
 }
 
@@ -46,16 +34,28 @@ function collectState() {
  * Перерисовка состояния таблицы при любых изменениях
  * @param {HTMLButtonElement?} action
  */
-function render(action) {
-    let state = collectState(); // состояние полей из таблицы
-    let result = [...data]; // копируем для последующего изменения
-    // @todo: использование
-    result = applySearching(result, state, action);
-    result = applyFiltering(result, state, action);
-    result = applySorting(result, state, action);
-    result = applyPagination(result, state, action);
+async function render(action) {
+    let state = collectState();
+    if (!globalIndexes) {
+        return;
+    }
+    
+    // Формируем query строго по требованиям сервера
+    let query = {};
 
-    sampleTable.render(result);
+    query = applyPagination(query, state, action);
+    query = applyFiltering(query, state, action);
+    query = applySearching(query, state, action);
+    query = applySorting(query, state, action); 
+
+    try {
+        const { total, items } = await api.getRecords(query);
+        updatePagination(total, query);
+        sampleTable.render(items);
+    } catch (error) {
+        console.error('Ошибка API:', error);
+        sampleTable.render([]); 
+    }
 }
 
 const sampleTable = initTable({
@@ -66,21 +66,19 @@ const sampleTable = initTable({
 }, render);
 
 // @todo: инициализация
-const applySearching = initSearching('query');
+const applySearching = initSearching('search'); 
 
 const applySorting = initSorting([
     sampleTable.header.elements.sortByDate,
     sampleTable.header.elements.sortByTotal
 ]);
 
-const applyFiltering = initFiltering(sampleTable.filter.elements, {
-    searchBySeller: sellersList,      // <-- Теперь это гарантированно массив строк
-    searchByCustomer: customersList   // <-- И это тоже массив строк
-}); 
+const {applyFiltering, updateIndexes}  = initFiltering(sampleTable.filter.elements, {
+   }); 
 
-const applyPagination = initPagination(
-    sampleTable.pagination.elements,             // передаём сюда элементы пагинации, найденные в шаблоне
-    (el, page, isCurrent) => {// и колбэк, чтобы заполнять кнопки страниц данными
+const { applyPagination, updatePagination } = initPagination(
+    sampleTable.pagination.elements,
+    (el, page, isCurrent) => {
         const input = el.querySelector('input');
         const label = el.querySelector('span');
         input.value = page;
@@ -90,8 +88,24 @@ const applyPagination = initPagination(
     }
 );
 
-
 const appRoot = document.querySelector('#app');
 appRoot.appendChild(sampleTable.container);
 
-render();
+async function init() {
+    globalIndexes = await api.getIndexes();    
+}
+
+init().then(() => {
+  // Теперь можно безопасно создать списки
+  const sellersList = Object.values(globalIndexes.sellers);
+  const customersList = Object.values(globalIndexes.customers);
+
+  // Заполняем выпадающие списки данными
+  updateIndexes(sampleTable.filter.elements, {
+    searchBySeller: sellersList,
+    searchByCustomer: customersList
+  });
+
+  // Первый рендер таблицы
+  render();
+}); 
