@@ -1,9 +1,3 @@
-import {createComparison, defaultRules} from "../lib/compare.js";
-
-// @todo: #4.3 — настроить компаратор
-    const compare = createComparison(defaultRules);
-
-
 export function initFiltering(elements) {
     const updateIndexes = (elements, indexes) => {
         Object.keys(indexes).forEach((elementName) => {
@@ -17,34 +11,42 @@ export function initFiltering(elements) {
     }
 
     const applyFiltering = (query, state, action) => {
-        // @todo: #4.2 — обработать очистку поля
-        if (action && action.name === 'clear') {
-            // Находим родительский элемент кнопки
-            const parent = action.parentElement;
-            
-            // Ищем input внутри родителя по атрибуту data-field
-            // Значение data-field подскажет, какое именно поле нужно очистить
-            const fieldName = action.dataset.field;
-            const inputToClear = parent.querySelector(`input[data-field="${fieldName}"]`);
-            
-            if (inputToClear) {
-                inputToClear.value = '';
-            }
-        }
+  const filter = {};
 
-        // @todo: #4.5 — отфильтровать данные используя компаратор
-    
-       const filter = {};
-        Object.keys(elements).forEach(key => {
-            if (elements[key]) {
-                if (['INPUT', 'SELECT'].includes(elements[key].tagName) && elements[key].value) { // ищем поля ввода в фильтре с непустыми данными
-                    filter[`filter[${elements[key].name}]`] = elements[key].value; // чтобы сформировать в query вложенный объект фильтра
-                }
-            }
-        })
+  Object.keys(elements).forEach(key => {
+    const el = elements[key];
+    if (!el || !['INPUT', 'SELECT'].includes(el.tagName)) return;
 
-        return Object.keys(filter).length ? Object.assign({}, query, filter) : query; // если в фильтре что-то добавилось, применим к запросу
+    const value = el.value.trim();
+    if (!value) return; 
+
+    if (el.name === 'date') {
+      const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+      if (!dateRegex.test(value)) {
+        console.warn('Неверный формат даты, фильтр по дате не применяется:', value);
+        return; 
+      }
+      filter[`filter[date]`] = value;
+    } 
+    else if (el.name === 'customer') {
+      filter[`filter[customer]`] = value;
     }
+  });
+
+  const updatedQuery = Object.keys(filter).length ? Object.assign({}, query, filter) : query;
+
+  if (action && action.name === 'clear') {
+    const inputsToClear = document.querySelectorAll('input[name="date"], input[name="customer"]');
+    inputsToClear.forEach(input => {
+      input.value = '';
+    });
+
+    state[action.dataset.field] = '';
+    return query;
+  }
+
+  return updatedQuery;
+};
 
     return {
         updateIndexes,

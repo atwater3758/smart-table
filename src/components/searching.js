@@ -1,5 +1,3 @@
-import { rules, createComparison } from "../lib/compare.js";
-
 // src/components/search.js
 
 export function initSearching(searchField) {

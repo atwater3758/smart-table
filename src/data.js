@@ -39,8 +39,14 @@ const getRecords = async (query, isUpdated = false) => {
         }
 
         const response = await fetch(`${BASE_URL}/records?${nextQuery}`);
+        if (!response.ok) {
+            const errorText = await response.text();
+        throw new Error(`API error: ${response.status} ${response.statusText}${errorText ? ' - ' + errorText : ''}`);
+        }
         const records = await response.json();
-
+        if (!records || !Array.isArray(records.items)) {
+            throw new Error('Unexpected API response format');
+        }
         lastQuery = nextQuery; 
         lastResult = {
             total: records.total,

@@ -24,7 +24,6 @@ function collectState() {
         ...state,
         // Гарантируем числа, иначе сервер вернёт 400
         page: parseInt(state.page) || 1,
-       // rowsPerPage: parseInt(state.rowsPerPage) || 10,
         search: state.search,
         filter: state.filter
     };
@@ -44,24 +43,26 @@ async function render(action) {
     let query = {};
 
     query = applyPagination(query, state, action);
-    query = applyFiltering(query, state, action);
     query = applySearching(query, state, action);
+    query = applyFiltering(query, state, action);
     query = applySorting(query, state, action); 
 
     try {
         const { total, items } = await api.getRecords(query);
         updatePagination(total, query);
-        sampleTable.render(items);
+
+        const safeItems = Array.isArray(items) ? items : [];
+        sampleTable.render(safeItems);
     } catch (error) {
         console.error('Ошибка API:', error);
-        sampleTable.render([]); 
+        sampleTable.render([]);
     }
 }
 
 const sampleTable = initTable({
     tableTemplate: 'table',
     rowTemplate: 'row',
-    before: ['header', 'filter', 'search'],
+    before: ['search','header', 'filter'],
     after: ['pagination']
 }, render);
 
